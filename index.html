@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ナギみなオンリー名｜好きな3つを見つけよう</title>
+<title>ナギみなオンリータイトル総選挙</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#e9dfc9;color:#3f3a32;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif}
@@ -39,26 +39,24 @@ button.primary{width:100%;border:0;border-radius:12px;padding:14px;background:#3
 <div class="wrap">
   <div id="sort">
     <h1>ナギみなオンリータイトル総選挙</h1>
-    <div class="sub">候補を2つずつ比べて、「より好き」と思う方を選んでください。TOP3が決まった時点で終了します。深く考えず、直感でどうぞ。</div>
+    <div class="sub">なんと24個も候補をいただきましたのでTOP3ソートを作成しました。
+オンリータイトル候補で「より好き」と思う方を選んでください。TOP3が決まった時点で終了し、結果を反映させた投票ページへご案内します（後ほど手動で変更可能）深く考えず、直感でどうぞ！</div>
     <div class="card">
       <div class="progress"><div class="bar" id="bar"></div></div>
-      <p class="q" id="q">どちらが好き？</p>
+      <p class="q" id="q">どちらがよりお好みですか？</p>
       <div class="choices">
         <button class="choice" id="a">渚に揺らめく水面とあなた</button>
         <button class="choice" id="b">凪の水面に過ぎゆく春が</button>
       </div>
-      <button class="skip" id="skip">どちらも決めにくい</button>
+      <button class="skip" id="skip">どちらも同じくらい好き</button>
     </div>
   </div>
 
   <div class="card result" id="result">
     <h2>あなたのTOP3</h2>
-    <p>比較の結果、あなたが特に好きだった候補はこちらです。</p>
+    <p>ソートの結果、あなたが特に好きだったタイトル候補はこちらです。</p>
     <div class="top" id="top"></div>
-    <div class="vote">
-      <h3>この3つの中から、最終的に一番推したいものを1つ選ぶ</h3>
-      <div id="voteOptions"></div>
-      <button class="primary" id="openForm">この3つで投票する</button>
+      <button class="primary" id="openForm">この3候補で投票する</button>
       <div class="note">TOP3が選択された状態でGoogleフォームを開きます。内容を確認して、そのまま送信できます。</div>
     </div>
     <button class="restart" id="restart">もう一度やる</button>
