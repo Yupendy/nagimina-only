@@ -60,55 +60,114 @@ h1{font-size:22px;font-weight:600;margin:0 0 8px}
 <script>
 const candidates = ["渚に揺らめく水面とあなた","凪の水面に過ぎゆく春が","繋ぎとめよう、惜しみない愛を","春を待つふたり","凪いでる振りしてヘビーな恋を！","恋の暗号は北のプリンスと蛇しか知らない","十六夜の日になつめく恋を","波が穏やかになること","幸せなギフトをみな様に","NAGIMINA IN BLOOM","ノスメ航空臨時便","桜凪ぐ波打ち際","凪と波のあいだ","北の王子様に薔薇を","NAGIMINA, NORTHBOUND","大人ぎりぎりの水無月","王子様、蛇に噛まれる","渚のギャングスター","治外法権の波打ち際にて","わがままなgive me now!","凪ゆらぎ水面が揺蕩う頃に","全部あなたのせいですよ","凪いだ水面に浮かんだ桜","渚に押し寄る恋と波"];
 
-const PRELIM_ROUNDS=2;
-const FINAL_COUNT=5;
+const PRELIM_ROUNDS = 3;
+const FINAL_COUNT = 6;
 
-let phase="prelim";
-let prelimPairs=[];
-let prelimIndex=0;
-let scores=new Array(candidates.length).fill(0);
-let finalCandidates=[];
-let finalPairs=[];
-let finalIndex=0;
-let finalScores={};
-let current=null;
-let previous=null;
-let finalTop=[];
+let phase = "prelim";
+let prelimPairs = [];
+let prelimIndex = 0;
+let ratings = new Array(candidates.length).fill(1000);
+let wins = new Array(candidates.length).fill(0);
+let losses = new Array(candidates.length).fill(0);
+let finalCandidates = [];
+let finalPairs = [];
+let finalIndex = 0;
+let finalWins = {};
+let current = null;
+let previous = null;
+let finalTop = [];
 
 function randomInt(max){
   if(window.crypto && crypto.getRandomValues){
-    const a=new Uint32Array(1);
-    const limit=Math.floor(4294967296/max)*max;
-    do{crypto.getRandomValues(a)}while(a[0]>=limit);
-    return a[0]%max;
+    const a = new Uint32Array(1);
+    const limit = Math.floor(4294967296 / max) * max;
+    do { crypto.getRandomValues(a); } while(a[0] >= limit);
+    return a[0] % max;
   }
-  return Math.floor(Math.random()*max);
+  return Math.floor(Math.random() * max);
 }
 function shuffle(a){
-  const x=a.slice();
+  const x = a.slice();
   for(let i=x.length-1;i>0;i--){
-    const j=randomInt(i+1);
-    [x[i],x[j]]=[x[j],x[i]];
+    const j = randomInt(i+1);
+    [x[i],x[j]] = [x[j],x[i]];
   }
   return x;
 }
+
+/* 各候補が3回、毎回できるだけ違う相手と対戦する組み合わせを作る */
 function makePrelimPairs(){
-  prelimPairs=[];
-  const ids=[...Array(candidates.length).keys()];
-  for(let r=0;r<PRELIM_ROUNDS;r++){
-    const order=shuffle(ids);
-    for(let i=0;i<order.length;i+=2){
-      prelimPairs.push([order[i],order[i+1]]);
+  const used = Array.from({length:candidates.length},()=>new Set());
+  const pairs = [];
+  for(let round=0; round<PRELIM_ROUNDS; round++){
+    let made = false;
+    for(let attempt=0; attempt<500 && !made; attempt++){
+      const order = shuffle([...Array(candidates.length).keys()]);
+      const roundPairs = [];
+      let ok = true;
+      for(let i=0;i<order.length;i+=2){
+        const a=order[i], b=order[i+1];
+        if(used[a].has(b) || used[b].has(a)){ ok=false; break; }
+        roundPairs.push([a,b]);
+      }
+      if(ok){
+        roundPairs.forEach(([a,b])=>{used[a].add(b);used[b].add(a);});
+        pairs.push(...roundPairs);
+        made=true;
+      }
+    }
+    /* 万一ランダム生成が詰まった場合も、未使用相手を優先して生成 */
+    if(!made){
+      const order=shuffle([...Array(candidates.length).keys()]);
+      for(let i=0;i<order.length;i+=2){
+        const a=order[i],b=order[i+1];
+        used[a].add(b);used[b].add(a);pairs.push([a,b]);
+      }
     }
   }
+  return pairs;
 }
+
+/* 軽量なElo方式。強い候補に勝つほど評価が大きく上がる */
+function updateRating(winner, loser){
+  const expected = 1 / (1 + Math.pow(10,(ratings[winner]-ratings[loser])/400));
+  const k = 32;
+  ratings[winner] += k * (1-expected);
+  ratings[loser] += k * (0- (1-expected));
+  wins[winner]++;
+  losses[loser]++;
+}
+
 function start(){
   phase="prelim";
+  prelimPairs=makePrelimPairs();
   prelimIndex=0;
-  scores.fill(0);
-  makePrelimPairs();
+  ratings.fill(1000);
+  wins.fill(0);
+  losses.fill(0);
+  previous=null;
   nextMatch();
 }
+
+function beginFinal(){
+  finalCandidates=[...Array(candidates.length).keys()]
+    .sort((a,b)=>ratings[b]-ratings[a] || wins[b]-wins[a] || randomInt(2)-1)
+    .slice(0,FINAL_COUNT);
+
+  finalPairs=[];
+  for(let i=0;i<finalCandidates.length;i++){
+    for(let j=i+1;j<finalCandidates.length;j++){
+      finalPairs.push([finalCandidates[i],finalCandidates[j]]);
+    }
+  }
+  finalPairs=shuffle(finalPairs);
+  finalIndex=0;
+  finalWins={};
+  finalCandidates.forEach(x=>finalWins[x]=0);
+  phase="final";
+  nextMatch();
+}
+
 function nextMatch(){
   if(phase==="prelim"){
     if(prelimIndex>=prelimPairs.length){
@@ -125,68 +184,65 @@ function nextMatch(){
   }
   render();
 }
-function beginFinal(){
-  const ranked=[...Array(candidates.length).keys()]
-    .sort((a,b)=>scores[b]-scores[a] || randomInt(2)-1);
-  finalCandidates=ranked.slice(0,FINAL_COUNT);
-  finalPairs=[];
-  for(let i=0;i<finalCandidates.length;i++){
-    for(let j=i+1;j<finalCandidates.length;j++){
-      finalPairs.push([finalCandidates[i],finalCandidates[j]]);
-    }
-  }
-  finalPairs=shuffle(finalPairs);
-  finalIndex=0;
-  finalScores={};
-  finalCandidates.forEach(x=>finalScores[x]=0);
-  phase="final";
-  nextMatch();
-}
+
+/* 一手前だけ保存 */
 function savePrevious(){
-  // 直前の1回だけ保存。履歴は積みません。
   previous={
-    phase,
-    prelimIndex,
-    scores:scores.slice(),
-    finalIndex,
-    finalScores:Object.assign({},finalScores),
+    phase:phase,
+    prelimIndex:prelimIndex,
+    ratings:ratings.slice(),
+    wins:wins.slice(),
+    losses:losses.slice(),
+    finalIndex:finalIndex,
+    finalWins:Object.assign({},finalWins),
     current:current ? current.slice() : null
   };
   document.getElementById("back").disabled=false;
 }
+
 function choose(which){
-  if(!current)return;
+  if(!current) return;
   savePrevious();
-  const winner=current[which];
+
+  const a=current[0], b=current[1], winner=current[which], loser=current[1-which];
+
   if(phase==="prelim"){
-    scores[winner]++;
+    updateRating(winner,loser);
     prelimIndex++;
   }else{
-    finalScores[winner]++;
+    finalWins[winner]++;
     finalIndex++;
   }
   nextMatch();
 }
+
 function backOne(){
-  if(!previous)return;
+  if(!previous) return;
   phase=previous.phase;
   prelimIndex=previous.prelimIndex;
-  scores=previous.scores.slice();
+  ratings=previous.ratings.slice();
+  wins=previous.wins.slice();
+  losses=previous.losses.slice();
   finalIndex=previous.finalIndex;
-  finalScores=Object.assign({},previous.finalScores);
+  finalWins=Object.assign({},previous.finalWins);
   current=previous.current ? previous.current.slice() : null;
   previous=null;
+
   document.getElementById("back").disabled=true;
   document.getElementById("sort").style.display="block";
   document.getElementById("result").style.display="none";
   render();
 }
+
 function finish(){
-  finalTop=finalCandidates.slice().sort((a,b)=>
-    finalScores[b]-finalScores[a] ||
-    scores[b]-scores[a] ||
-    randomInt(2)-1
-  ).slice(0,3);
+  finalTop=finalCandidates.slice()
+    .sort((a,b)=>
+      finalWins[b]-finalWins[a] ||
+      ratings[b]-ratings[a] ||
+      wins[b]-wins[a] ||
+      randomInt(2)-1
+    )
+    .slice(0,3);
 
   document.getElementById("sort").style.display="none";
   document.getElementById("result").style.display="block";
@@ -195,8 +251,9 @@ function finish(){
   ).join("");
   document.getElementById("bar").style.width="100%";
 }
+
 function render(){
-  if(!current)return;
+  if(!current) return;
   document.getElementById("a").textContent=candidates[current[0]];
   document.getElementById("b").textContent=candidates[current[1]];
   document.getElementById("q").textContent="どちらがお好きですか？";
@@ -205,6 +262,7 @@ function render(){
   const done=phase==="prelim" ? prelimIndex : prelimPairs.length+finalIndex;
   document.getElementById("bar").style.width=Math.min(96,done/total*100)+"%";
 }
+
 function esc(s){
   return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 }
@@ -213,11 +271,13 @@ document.getElementById("a").onclick=()=>choose(0);
 document.getElementById("b").onclick=()=>choose(1);
 document.getElementById("back").onclick=backOne;
 document.getElementById("restart").onclick=()=>location.reload();
+
 document.getElementById("openForm").onclick=()=>{
   const base="https://docs.google.com/forms/d/e/1FAIpQLSfQifzm6imaI4XfThsNBugEAuRLNyEEYZB5z1pf2yOcrmgiVw/viewform?usp=pp_url";
   const entry="entry.1497568293";
   location.href=base+"&"+finalTop.map(i=>entry+"="+encodeURIComponent(candidates[i])).join("&");
 };
+
 start();
 </script>
 </body></html>
