@@ -61,101 +61,138 @@ h1{font-size:22px;font-weight:600;margin:0 0 8px}
 const candidates = ["渚に揺らめく水面とあなた","凪の水面に過ぎゆく春が","繋ぎとめよう、惜しみない愛を","春を待つふたり","凪いでる振りしてヘビーな恋を！","恋の暗号は北のプリンスと蛇しか知らない","十六夜の日になつめく恋を","波が穏やかになること","幸せなギフトをみな様に","NAGIMINA IN BLOOM","ノスメ航空臨時便","桜凪ぐ波打ち際","凪と波のあいだ","北の王子様に薔薇を","NAGIMINA, NORTHBOUND","大人ぎりぎりの水無月","王子様、蛇に噛まれる","渚のギャングスター","治外法権の波打ち際にて","わがままなgive me now!","凪ゆらぎ水面が揺蕩う頃に","全部あなたのせいですよ","凪いだ水面に浮かんだ桜","渚に押し寄る恋と波"];
 
 const PRELIM_ROUNDS=2;
-const TOP_COUNT=6;
-let phase="prelim", pairs=[], pairIndex=0, scores=new Array(candidates.length).fill(0);
-let topCandidates=[], finalTop=[], topPairIndex=0, topScores=new Array(TOP_COUNT).fill(0);
-let current=null, previousState=null;
+const FINAL_COUNT=5;
+
+let phase="prelim";
+let prelimPairs=[];
+let prelimIndex=0;
+let scores=new Array(candidates.length).fill(0);
+let finalCandidates=[];
+let finalPairs=[];
+let finalIndex=0;
+let finalScores={};
+let current=null;
+let previous=null;
+let finalTop=[];
 
 function randomInt(max){
-  if(window.crypto&&crypto.getRandomValues){
-    const a=new Uint32Array(1), limit=Math.floor(0x100000000/max)*max;
+  if(window.crypto && crypto.getRandomValues){
+    const a=new Uint32Array(1);
+    const limit=Math.floor(4294967296/max)*max;
     do{crypto.getRandomValues(a)}while(a[0]>=limit);
     return a[0]%max;
   }
   return Math.floor(Math.random()*max);
 }
 function shuffle(a){
-  a=a.slice();
-  for(let i=a.length-1;i>0;i--){const j=randomInt(i+1);[a[i],a[j]]=[a[j],a[i]]}
-  return a;
+  const x=a.slice();
+  for(let i=x.length-1;i>0;i--){
+    const j=randomInt(i+1);
+    [x[i],x[j]]=[x[j],x[i]];
+  }
+  return x;
+}
+function makePrelimPairs(){
+  prelimPairs=[];
+  const ids=[...Array(candidates.length).keys()];
+  for(let r=0;r<PRELIM_ROUNDS;r++){
+    const order=shuffle(ids);
+    for(let i=0;i<order.length;i+=2){
+      prelimPairs.push([order[i],order[i+1]]);
+    }
+  }
+}
+function start(){
+  phase="prelim";
+  prelimIndex=0;
+  scores.fill(0);
+  makePrelimPairs();
+  nextMatch();
+}
+function nextMatch(){
+  if(phase==="prelim"){
+    if(prelimIndex>=prelimPairs.length){
+      beginFinal();
+      return;
+    }
+    current=prelimPairs[prelimIndex];
+  }else{
+    if(finalIndex>=finalPairs.length){
+      finish();
+      return;
+    }
+    current=finalPairs[finalIndex];
+  }
+  render();
+}
+function beginFinal(){
+  const ranked=[...Array(candidates.length).keys()]
+    .sort((a,b)=>scores[b]-scores[a] || randomInt(2)-1);
+  finalCandidates=ranked.slice(0,FINAL_COUNT);
+  finalPairs=[];
+  for(let i=0;i<finalCandidates.length;i++){
+    for(let j=i+1;j<finalCandidates.length;j++){
+      finalPairs.push([finalCandidates[i],finalCandidates[j]]);
+    }
+  }
+  finalPairs=shuffle(finalPairs);
+  finalIndex=0;
+  finalScores={};
+  finalCandidates.forEach(x=>finalScores[x]=0);
+  phase="final";
+  nextMatch();
 }
 function savePrevious(){
-  previousState={
-    phase,pairs: pairs.slice(),pairIndex,scores:scores.slice(),
-    topCandidates:topCandidates.slice(),finalTop:finalTop.slice(),
-    topPairIndex,topScores:topScores.slice(),current:current?current.slice():null
+  // 直前の1回だけ保存。履歴は積みません。
+  previous={
+    phase,
+    prelimIndex,
+    scores:scores.slice(),
+    finalIndex,
+    finalScores:Object.assign({},finalScores),
+    current:current ? current.slice() : null
   };
   document.getElementById("back").disabled=false;
 }
-function restorePrevious(){
-  if(!previousState)return;
-  const s=previousState;
-  phase=s.phase;pairs=s.pairs.slice();pairIndex=s.pairIndex;scores=s.scores.slice();
-  topCandidates=s.topCandidates.slice();finalTop=s.finalTop.slice();
-  topPairIndex=s.topPairIndex;topScores=s.topScores.slice();current=s.current?s.current.slice():null;
-  previousState=null;
-  document.getElementById("back").disabled=true;
-  document.getElementById("sort").style.display="block";
-  document.getElementById("result").style.display="none";
-  render();
-}
-function makePairs(){
-  const ids=shuffle([...Array(candidates.length).keys()]);
-  pairs=[];
-  // Every candidate appears exactly twice in the preliminary phase.
-  for(let r=0;r<PRELIM_ROUNDS;r++){
-    const a=shuffle(ids);
-    for(let i=0;i<a.length;i+=2)pairs.push([a[i],a[i+1]]);
-  }
-  pairIndex=0;
-}
-function start(){
-  phase="prelim";makePairs();next();
-}
-function next(){
-  if(phase==="prelim"){
-    if(pairIndex>=pairs.length){selectTop();return}
-    current=pairs[pairIndex];
-  }else{
-    if(topPairIndex>=topPairs.length){finish();return}
-    current=topPairs[topPairIndex];
-  }
-  render();
-}
-function selectTop(){
-  const ranked=[...Array(candidates.length).keys()].sort((a,b)=>scores[b]-scores[a]||randomInt(2)-1);
-  topCandidates=ranked.slice(0,TOP_COUNT);
-  topPairs=[];
-  for(let i=0;i<topCandidates.length;i++)
-    for(let j=i+1;j<topCandidates.length;j++)topPairs.push([topCandidates[i],topCandidates[j]]);
-  topPairs=shuffle(topPairs);
-  topPairIndex=0;topScores=new Array(TOP_COUNT).fill(0);phase="top";next();
-}
-let topPairs=[];
 function choose(which){
   if(!current)return;
   savePrevious();
   const winner=current[which];
   if(phase==="prelim"){
     scores[winner]++;
-    pairIndex++;
+    prelimIndex++;
   }else{
-    const idx=topCandidates.indexOf(winner);
-    if(idx>=0)topScores[idx]++;
-    topPairIndex++;
+    finalScores[winner]++;
+    finalIndex++;
   }
-  next();
+  nextMatch();
+}
+function backOne(){
+  if(!previous)return;
+  phase=previous.phase;
+  prelimIndex=previous.prelimIndex;
+  scores=previous.scores.slice();
+  finalIndex=previous.finalIndex;
+  finalScores=Object.assign({},previous.finalScores);
+  current=previous.current ? previous.current.slice() : null;
+  previous=null;
+  document.getElementById("back").disabled=true;
+  document.getElementById("sort").style.display="block";
+  document.getElementById("result").style.display="none";
+  render();
 }
 function finish(){
-  const order=topCandidates.slice().sort((a,b)=>{
-    const sa=topScores[topCandidates.indexOf(a)], sb=topScores[topCandidates.indexOf(b)];
-    return sb-sa || scores[b]-scores[a] || randomInt(2)-1;
-  });
-  finalTop=order.slice(0,3);
+  finalTop=finalCandidates.slice().sort((a,b)=>
+    finalScores[b]-finalScores[a] ||
+    scores[b]-scores[a] ||
+    randomInt(2)-1
+  ).slice(0,3);
+
   document.getElementById("sort").style.display="none";
   document.getElementById("result").style.display="block";
   document.getElementById("top").innerHTML=finalTop.map((x,i)=>
-    `<div class="row"><div class="num">${i+1}</div><div class="name">${esc(candidates[x])}</div></div>`).join("");
+    '<div class="row"><div class="num">'+(i+1)+'</div><div class="name">'+esc(candidates[x])+'</div></div>'
+  ).join("");
   document.getElementById("bar").style.width="100%";
 }
 function render(){
@@ -163,15 +200,18 @@ function render(){
   document.getElementById("a").textContent=candidates[current[0]];
   document.getElementById("b").textContent=candidates[current[1]];
   document.getElementById("q").textContent="どちらがお好きですか？";
-  const total=phase==="prelim"?pairs.length:pairs.length+topPairs.length;
-  const done=phase==="prelim"?pairIndex:pairs.length+topPairIndex;
+
+  const total=prelimPairs.length+finalPairs.length;
+  const done=phase==="prelim" ? prelimIndex : prelimPairs.length+finalIndex;
   document.getElementById("bar").style.width=Math.min(96,done/total*100)+"%";
 }
-function esc(s){return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function esc(s){
+  return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
 
 document.getElementById("a").onclick=()=>choose(0);
 document.getElementById("b").onclick=()=>choose(1);
-document.getElementById("back").onclick=restorePrevious;
+document.getElementById("back").onclick=backOne;
 document.getElementById("restart").onclick=()=>location.reload();
 document.getElementById("openForm").onclick=()=>{
   const base="https://docs.google.com/forms/d/e/1FAIpQLSfQifzm6imaI4XfThsNBugEAuRLNyEEYZB5z1pf2yOcrmgiVw/viewform?usp=pp_url";
