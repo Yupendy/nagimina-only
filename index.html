@@ -58,62 +58,125 @@ h1{font-size:22px;font-weight:600;margin:0 0 8px}
 </div>
 </div>
 <script>
-const candidates=["渚に揺らめく水面とあなた", "凪の水面に過ぎゆく春が", "繋ぎとめよう、惜しみない愛を", "春を待つふたり", "凪いでる振りしてヘビーな恋を！", "恋の暗号は北のプリンスと蛇しか知らない", "十六夜の日になつめく恋を", "波が穏やかになること", "幸せなギフトをみな様に", "NAGIMINA IN BLOOM", "ノスメ航空臨時便", "桜凪ぐ波打ち際", "凪と波のあいだ", "北の王子様に薔薇を", "NAGIMINA, NORTHBOUND", "大人ぎりぎりの水無月", "王子様、蛇に噛まれる", "渚のギャングスター", "治外法権の波打ち際にて", "わがままなgive me now!", "凪ゆらぎ水面が揺蕩う頃に", "全部あなたのせいですよ", "凪いだ水面に浮かんだ桜", "渚に押し寄る恋と波"];
+const candidates = ["渚に揺らめく水面とあなた","凪の水面に過ぎゆく春が","繋ぎとめよう、惜しみない愛を","春を待つふたり","凪いでる振りしてヘビーな恋を！","恋の暗号は北のプリンスと蛇しか知らない","十六夜の日になつめく恋を","波が穏やかになること","幸せなギフトをみな様に","NAGIMINA IN BLOOM","ノスメ航空臨時便","桜凪ぐ波打ち際","凪と波のあいだ","北の王子様に薔薇を","NAGIMINA, NORTHBOUND","大人ぎりぎりの水無月","王子様、蛇に噛まれる","渚のギャングスター","治外法権の波打ち際にて","わがままなgive me now!","凪ゆらぎ水面が揺蕩う頃に","全部あなたのせいですよ","凪いだ水面に浮かんだ桜","渚に押し寄る恋と波"];
+
 const PRELIM_ROUNDS=2;
-const TOP_N=6;
-const state={phase:"prelim",round:0,matchIndex:0,pairs:[],scores:Array(candidates.length).fill(0),matches:Array(candidates.length).fill(0),topPairs:[],topIndex:0,topScores:[],history:[],current:null,finalTop:[]};
-function randInt(max){
+const TOP_COUNT=6;
+let phase="prelim", pairs=[], pairIndex=0, scores=new Array(candidates.length).fill(0);
+let topCandidates=[], finalTop=[], topPairIndex=0, topScores=new Array(TOP_COUNT).fill(0);
+let current=null, previousState=null;
+
+function randomInt(max){
   if(window.crypto&&crypto.getRandomValues){
-    const a=new Uint32Array(1),limit=Math.floor(0x100000000/max)*max;
+    const a=new Uint32Array(1), limit=Math.floor(0x100000000/max)*max;
     do{crypto.getRandomValues(a)}while(a[0]>=limit);
     return a[0]%max;
   }
   return Math.floor(Math.random()*max);
 }
-function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){let j=randInt(i+1);[a[i],a[j]]=[a[j],a[i]]}return a}
-function snapshot(){return JSON.parse(JSON.stringify(state))}
-function restore(s){Object.keys(state).forEach(k=>delete state[k]);Object.assign(state,JSON.parse(JSON.stringify(s)));render()}
-function makePrelimPairs(){let ids=shuffle([...Array(candidates.length).keys()]);state.pairs=[];for(let r=0;r<PRELIM_ROUNDS;r++){let rot=shuffle(ids);for(let i=0;i<rot.length;i+=2)state.pairs.push([rot[i],rot[i+1]])}state.matchIndex=0}
-function nextMatch(){if(state.phase==="prelim"){if(state.matchIndex>=state.pairs.length){startTopPhase();return}state.current=state.pairs[state.matchIndex]}
-else{if(state.topIndex>=state.topPairs.length){finish();return}state.current=state.topPairs[state.topIndex]}
-render()}
-function start(){makePrelimPairs();nextMatch()}
-function startTopPhase(){
- state.phase="top";state.topScores=Array(TOP_N).fill(0);
- const ranked=[...Array(candidates.length).keys()].sort((x,y)=>state.scores[y]-state.scores[x]||randInt(2)-1);
- const top=ranked.slice(0,TOP_N);state.topCandidates=top;state.topPairs=[];
- for(let i=0;i<top.length;i++)for(let j=i+1;j<top.length;j++)state.topPairs.push([top[i],top[j]]);
- state.topPairs=shuffle(state.topPairs);state.topIndex=0;nextMatch();
+function shuffle(a){
+  a=a.slice();
+  for(let i=a.length-1;i>0;i--){const j=randomInt(i+1);[a[i],a[j]]=[a[j],a[i]]}
+  return a;
 }
-function choose(w){
- state.history.push(snapshot());
- const [a,b]=state.current, winner=w?b:a;
- if(state.phase==="prelim"){state.scores[winner]++;state.matches[a]++;state.matches[b]++;state.matchIndex++}
- else{const k=state.topCandidates.indexOf(winner);if(k>=0)state.topScores[k]++;state.topIndex++}
- nextMatch();
+function savePrevious(){
+  previousState={
+    phase,pairs: pairs.slice(),pairIndex,scores:scores.slice(),
+    topCandidates:topCandidates.slice(),finalTop:finalTop.slice(),
+    topPairIndex,topScores:topScores.slice(),current:current?current.slice():null
+  };
+  document.getElementById("back").disabled=false;
+}
+function restorePrevious(){
+  if(!previousState)return;
+  const s=previousState;
+  phase=s.phase;pairs=s.pairs.slice();pairIndex=s.pairIndex;scores=s.scores.slice();
+  topCandidates=s.topCandidates.slice();finalTop=s.finalTop.slice();
+  topPairIndex=s.topPairIndex;topScores=s.topScores.slice();current=s.current?s.current.slice():null;
+  previousState=null;
+  document.getElementById("back").disabled=true;
+  document.getElementById("sort").style.display="block";
+  document.getElementById("result").style.display="none";
+  render();
+}
+function makePairs(){
+  const ids=shuffle([...Array(candidates.length).keys()]);
+  pairs=[];
+  // Every candidate appears exactly twice in the preliminary phase.
+  for(let r=0;r<PRELIM_ROUNDS;r++){
+    const a=shuffle(ids);
+    for(let i=0;i<a.length;i+=2)pairs.push([a[i],a[i+1]]);
+  }
+  pairIndex=0;
+}
+function start(){
+  phase="prelim";makePairs();next();
+}
+function next(){
+  if(phase==="prelim"){
+    if(pairIndex>=pairs.length){selectTop();return}
+    current=pairs[pairIndex];
+  }else{
+    if(topPairIndex>=topPairs.length){finish();return}
+    current=topPairs[topPairIndex];
+  }
+  render();
+}
+function selectTop(){
+  const ranked=[...Array(candidates.length).keys()].sort((a,b)=>scores[b]-scores[a]||randomInt(2)-1);
+  topCandidates=ranked.slice(0,TOP_COUNT);
+  topPairs=[];
+  for(let i=0;i<topCandidates.length;i++)
+    for(let j=i+1;j<topCandidates.length;j++)topPairs.push([topCandidates[i],topCandidates[j]]);
+  topPairs=shuffle(topPairs);
+  topPairIndex=0;topScores=new Array(TOP_COUNT).fill(0);phase="top";next();
+}
+let topPairs=[];
+function choose(which){
+  if(!current)return;
+  savePrevious();
+  const winner=current[which];
+  if(phase==="prelim"){
+    scores[winner]++;
+    pairIndex++;
+  }else{
+    const idx=topCandidates.indexOf(winner);
+    if(idx>=0)topScores[idx]++;
+    topPairIndex++;
+  }
+  next();
 }
 function finish(){
- const order=[...state.topCandidates].sort((a,b)=>state.topScores[state.topCandidates.indexOf(b)]-state.topScores[state.topCandidates.indexOf(a)]||state.scores[b]-state.scores[a]||randInt(2)-1);
- state.finalTop=order.slice(0,3);
- document.getElementById("sort").style.display="none";document.getElementById("result").style.display="block";
- document.getElementById("top").innerHTML=state.finalTop.map((x,i)=>`<div class="row"><div class="num">${i+1}</div><div class="name">${esc(candidates[x])}</div></div>`).join("");
- document.getElementById("bar").style.width="100%";
+  const order=topCandidates.slice().sort((a,b)=>{
+    const sa=topScores[topCandidates.indexOf(a)], sb=topScores[topCandidates.indexOf(b)];
+    return sb-sa || scores[b]-scores[a] || randomInt(2)-1;
+  });
+  finalTop=order.slice(0,3);
+  document.getElementById("sort").style.display="none";
+  document.getElementById("result").style.display="block";
+  document.getElementById("top").innerHTML=finalTop.map((x,i)=>
+    `<div class="row"><div class="num">${i+1}</div><div class="name">${esc(candidates[x])}</div></div>`).join("");
+  document.getElementById("bar").style.width="100%";
 }
 function render(){
- const [a,b]=state.current||[0,1];document.getElementById("a").textContent=candidates[a];document.getElementById("b").textContent=candidates[b];
- document.getElementById("q").textContent="どちらがお好きですか？";document.getElementById("back").disabled=state.history.length===0;
- const total=state.pairs.length+state.topPairs.length||39;
- const done=state.phase==="prelim"?state.matchIndex:state.pairs.length+state.topIndex;
- document.getElementById("bar").style.width=Math.min(96,done/total*100)+"%";
+  if(!current)return;
+  document.getElementById("a").textContent=candidates[current[0]];
+  document.getElementById("b").textContent=candidates[current[1]];
+  document.getElementById("q").textContent="どちらがお好きですか？";
+  const total=phase==="prelim"?pairs.length:pairs.length+topPairs.length;
+  const done=phase==="prelim"?pairIndex:pairs.length+topPairIndex;
+  document.getElementById("bar").style.width=Math.min(96,done/total*100)+"%";
 }
 function esc(s){return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
-document.getElementById("a").onclick=()=>choose(false);
-document.getElementById("b").onclick=()=>choose(true);
-document.getElementById("back").onclick=()=>{if(state.history.length)restore(state.history.pop())};
+
+document.getElementById("a").onclick=()=>choose(0);
+document.getElementById("b").onclick=()=>choose(1);
+document.getElementById("back").onclick=restorePrevious;
 document.getElementById("restart").onclick=()=>location.reload();
 document.getElementById("openForm").onclick=()=>{
- const base="https://docs.google.com/forms/d/e/1FAIpQLSfQifzm6imaI4XfThsNBugEAuRLNyEEYZB5z1pf2yOcrmgiVw/viewform?usp=pp_url",entry="entry.1497568293";
- location.href=base+"&"+state.finalTop.map(i=>entry+"="+encodeURIComponent(candidates[i])).join("&");
+  const base="https://docs.google.com/forms/d/e/1FAIpQLSfQifzm6imaI4XfThsNBugEAuRLNyEEYZB5z1pf2yOcrmgiVw/viewform?usp=pp_url";
+  const entry="entry.1497568293";
+  location.href=base+"&"+finalTop.map(i=>entry+"="+encodeURIComponent(candidates[i])).join("&");
 };
 start();
 </script>
