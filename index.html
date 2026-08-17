@@ -39,7 +39,7 @@ button.primary{width:100%;border:0;border-radius:12px;padding:14px;background:#3
 <div class="wrap">
   <div id="sort">
     <h1>ナギみなオンリータイトル総選挙</h1>
-    <div class="sub">候補を2つずつ比べて、「より好き」と思う方を選んでください。深く考えず、直感でどうぞ。最後にあなたのTOP3が表示されます。</div>
+    <div class="sub">候補を2つずつ比べて、「より好き」と思う方を選んでください。TOP3が決まった時点で終了します。深く考えず、直感でどうぞ。</div>
     <div class="card">
       <div class="progress"><div class="bar" id="bar"></div></div>
       <p class="q" id="q">どちらが好き？</p>
@@ -68,86 +68,236 @@ button.primary{width:100%;border:0;border-radius:12px;padding:14px;background:#3
 <script>
 const candidates = ["渚に揺らめく水面とあなた", "凪の水面に過ぎゆく春が", "繋ぎとめよう、惜しみない愛を", "春を待つふたり", "凪いでる振りしてヘビーな恋を！", "恋の暗号は北のプリンスと蛇しか知らない", "十六夜の日になつめく恋を", "波が穏やかになること", "幸せなギフトをみな様に", "NAGIMINA IN BLOOM", "ノスメ航空臨時便", "桜凪ぐ波打ち際", "凪と波のあいだ", "北の王子様に薔薇を", "NAGIMINA, NORTHBOUND", "大人ぎりぎりの水無月", "王子様、蛇に噛まれる", "渚のギャングスター", "治外法権の波打ち際にて", "わがままなgive me now!", "凪ゆらぎ水面が揺蕩う頃に", "全部あなたのせいですよ", "凪いだ水面に浮かんだ桜", "渚に押し寄る恋と波"];
 
-// Merge-sort style pairwise ranking. The initial order is shuffled so that
-// candidates are not presented in the order supplied by the organizer.
-let arr=[], comparisons=0, totalEstimate=0, queue=[], current=null, left=[], right=[], merged=[];
-function shuffle(x){x=[...x];for(let i=x.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]]}return x}
-function start(){
-  arr=shuffle(candidates); comparisons=0; queue=[]; 
-  // bottom-up merge sort, one pair comparison at a time
-  let width=1;
-  while(width<arr.length){
-    for(let i=0;i<arr.length;i+=2*width){
-      let l=arr.slice(i,i+width), r=arr.slice(i+width,i+2*width);
-      if(r.length) queue.push({l,r});
-      else queue.push({l, r:[]});
-    }
-    arr = []; // rebuilt after each pass
-    // We cannot execute passes until answers are known, so store pass structure.
-    queue=[]; break;
+let rounds=[], currentRound=0, currentMatch=0, comparisons=0, totalMatches=0;
+let finalTop=[];
+
+function shuffle(x){
+  x=[...x];
+  for(let i=x.length-1;i>0;i--){
+    let j=Math.floor(Math.random()*(i+1));
+    [x[i],x[j]]=[x[j],x[i]];
   }
-  buildPass(shuffle(candidates),1);
+  return x;
 }
-let passArr=[], passWidth=1, groups=[], gi=0, li=0, ri=0, mergedPass=[];
-function buildPass(a,w){
-  passArr=a; passWidth=w; groups=[];
-  for(let i=0;i<a.length;i+=2*w) groups.push({l:a.slice(i,i+w),r:a.slice(i+w,i+2*w)});
-  gi=0; li=0; ri=0; mergedPass=[]; nextComparison();
+
+// Tournament method:
+// 1. Find the #1 candidate.
+// 2. Find #2 only among candidates that directly lost to #1.
+// 3. Find #3 only among candidates that directly lost to #1 or #2.
+// This avoids sorting all 24 candidates.
+function makeTournament(items){
+  let pool=shuffle(items).map(name=>({name, lostTo:[]}));
+  let next=[];
+  while(pool.length){
+    if(pool.length===1){ next.push(pool.pop()); continue; }
+    const a=pool.pop(), b=pool.pop();
+    next.push({name:null, a, b});
+  }
+  return playTree(next);
 }
-function nextComparison(){
-  while(gi<groups.length){
-    let g=groups[gi];
-    if(g.r.length===0){ mergedPass.push(...g.l); gi++; continue; }
-    if(li>=g.l.length){mergedPass.push(...g.r.slice(ri));gi++;li=ri=0;continue}
-    if(ri>=g.r.length){mergedPass.push(...g.l.slice(li));gi++;li=ri=0;continue}
-    current=[g.l[li],g.r[ri]];
-    render();
+
+function playTree(nodes){
+  if(nodes.length===1) return nodes[0];
+  let next=[];
+  for(let i=0;i<nodes.length;i+=2){
+    if(!nodes[i+1]) next.push(nodes[i]);
+    else next.push({name:null,a:nodes[i],b:nodes[i+1]});
+  }
+  return playTree(next);
+}
+
+function flattenLeaves(node){
+  if(node.name!==null) return [node];
+  return [...flattenLeaves(node.a), ...flattenLeaves(node.b)];
+}
+
+function compareTree(node){
+  if(node.name!==null) return node;
+  const a=compareTree(node.a), b=compareTree(node.b);
+  return {name:null,a,b};
+}
+
+function start(){
+  // Build a simple tournament bracket. Each match records the loser,
+  // so only the candidates capable of being #2/#3 need further comparison.
+  let pool=shuffle(candidates);
+  rounds=[];
+  while(pool.length>1){
+    let next=[];
+    for(let i=0;i<pool.length;i+=2){
+      if(i+1<pool.length) next.push({a:pool[i], b:pool[i+1]});
+      else next.push({a:pool[i], b:null});
+    }
+    rounds.push(next);
+    pool=next.map((_,i)=>"WINNER_"+rounds.length+"_"+i);
+  }
+  // We don't use the placeholder rounds directly; use a match queue instead.
+  const matches=[];
+  let leaves=shuffle(candidates);
+  while(leaves.length>1){
+    const next=[];
+    for(let i=0;i<leaves.length;i+=2){
+      if(leaves[i+1]){
+        matches.push({a:leaves[i],b:leaves[i+1]});
+        next.push(null);
+      } else next.push(leaves[i]);
+    }
+    leaves=next;
+  }
+  // The bracket needs winners to be fed into later rounds dynamically.
+  bracketQueue = [shuffle(candidates)];
+  winners = [];
+  losersByWinner = new Map();
+  beginRound();
+}
+
+let bracketQueue=[], winners=[], losersByWinner=new Map();
+
+function beginRound(){
+  const pool=bracketQueue[bracketQueue.length-1];
+  if(pool.length===1){
+    const champion=pool[0];
+    const directLosers=losersByWinner.get(champion)||[];
+    findSecond(champion,directLosers);
     return;
   }
-  if(mergedPass.length===passArr.length){
-    if(passWidth>=passArr.length){finish(mergedPass);return}
-    buildPass(mergedPass,passWidth*2);
+  const next=[];
+  bracketCurrent={pool,index:0,next};
+  nextMatch();
+}
+
+let bracketCurrent=null;
+
+function nextMatch(){
+  const {pool,index,next}=bracketCurrent;
+  if(index>=pool.length){
+    bracketQueue.push(next);
+    beginRound();
+    return;
   }
+  if(index===pool.length-1){
+    next.push(pool[index]);
+    bracketCurrent.index++;
+    nextMatch();
+    return;
+  }
+  current=[pool[index],pool[index+1]];
+  bracketCurrent.index+=2;
+  render();
 }
+
+function recordWinner(winner, loser){
+  if(!losersByWinner.has(winner)) losersByWinner.set(winner,[]);
+  losersByWinner.get(winner).push(loser);
+  bracketCurrent.next.push(winner);
+  nextMatch();
+}
+
 function choose(which){
-  let g=groups[gi];
-  if(which===0){mergedPass.push(g.l[li++]);}
-  else {mergedPass.push(g.r[ri++]);}
-  comparisons++; nextComparison();
+  const winner=current[which], loser=current[1-which];
+  comparisons++;
+  recordWinner(winner,loser);
 }
+
 function skip(){
-  // tie: alternate the side to avoid forcing a choice
-  let g=groups[gi];
-  if(Math.random()<.5) mergedPass.push(g.l[li++]); else mergedPass.push(g.r[ri++]);
-  comparisons++; nextComparison();
+  // "どちらも決めにくい" は同率扱いとしてランダムに通過させます。
+  choose(Math.random()<0.5?0:1);
 }
+
+let phase="champion", secondPool=[], secondWinner=null, secondIndex=0;
+function findSecond(champion,pool){
+  phase="second";
+  secondWinner=champion;
+  secondPool=shuffle([...pool]);
+  if(secondPool.length===0){ finish([champion]); return; }
+  runSelection(secondPool,0,champion);
+}
+
+let selectionWinner=null, selectionPool=[], selectionIndex=0, selectionBase=null;
+function runSelection(pool,start,base){
+  selectionPool=pool;
+  selectionIndex=start;
+  selectionBase=base;
+  if(pool.length===0){ finish([base]); return; }
+  selectionWinner=pool[0];
+  selectionIndex=1;
+  nextSelection();
+}
+
+function nextSelection(){
+  if(selectionIndex>=selectionPool.length){
+    if(phase==="second"){
+      const champion=selectionBase;
+      secondWinner=selectionWinner;
+      const candidatesForThird=new Set();
+      (losersByWinner.get(champion)||[]).forEach(x=>{if(x!==secondWinner)candidatesForThird.add(x)});
+      (losersByWinner.get(secondWinner)||[]).forEach(x=>candidatesForThird.add(x));
+      const thirdPool=[...candidatesForThird];
+      if(thirdPool.length===0){ finish([champion,secondWinner]); return; }
+      phase="third";
+      runSelection(thirdPool,0,champion);
+      return;
+    }
+    finish([selectionBase,secondWinner,selectionWinner]);
+    return;
+  }
+  current=[selectionWinner,selectionPool[selectionIndex]];
+  render();
+}
+
+function selectionChoose(which){
+  const winner=current[which];
+  const loser=current[1-which];
+  comparisons++;
+  if(which===1){
+    // Keep track of the defeated candidate for the eventual third-place set.
+    if(!losersByWinner.has(winner)) losersByWinner.set(winner,[]);
+    losersByWinner.get(winner).push(loser);
+    selectionWinner=winner;
+  }
+  selectionIndex++;
+  nextSelection();
+}
+
 function render(){
   document.getElementById("a").textContent=current[0];
   document.getElementById("b").textContent=current[1];
   document.getElementById("q").textContent="どちらが好き？";
-  let est=Math.max(1,Math.ceil(candidates.length*Math.log2(candidates.length)));
-  document.getElementById("bar").style.width=Math.min(96,comparisons/est*70)+"%";
+  const max=45;
+  document.getElementById("bar").style.width=Math.min(96,comparisons/max*70)+"%";
 }
-function finish(sorted){
+
+document.getElementById("a").onclick=()=>{
+  if(phase==="champion") choose(0);
+  else selectionChoose(0);
+};
+document.getElementById("b").onclick=()=>{
+  if(phase==="champion") choose(1);
+  else selectionChoose(1);
+};
+document.getElementById("skip").onclick=skip;
+
+function finish(top){
+  finalTop=top.slice(0,3);
   document.getElementById("sort").style.display="none";
   document.getElementById("result").style.display="block";
-  let top=sorted.slice(0,3);
-  document.getElementById("top").innerHTML=top.map((x,i)=>`<div class="row"><div class="num">${i+1}</div><div class="name">${esc(x)}</div></div>`).join("");
-  document.getElementById("voteOptions").innerHTML=top.map((x,i)=>`<label><input type="radio" name="vote" value="${escAttr(x)}"> ${esc(x)}</label>`).join("");
-  window.finalTop=top;
+  document.getElementById("top").innerHTML=finalTop.map((x,i)=>`<div class="row"><div class="num">${i+1}</div><div class="name">${esc(x)}</div></div>`).join("");
+  document.getElementById("voteOptions").innerHTML=finalTop.map((x,i)=>`<label><input type="radio" name="vote" value="${escAttr(x)}"> ${esc(x)}</label>`).join("");
+  window.finalTop=finalTop;
+  document.getElementById("bar").style.width="100%";
 }
+
 function esc(s){return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
 function escAttr(s){return s.replace(/"/g,"&quot;")}
-document.getElementById("a").onclick=()=>choose(0);
-document.getElementById("b").onclick=()=>choose(1);
-document.getElementById("skip").onclick=skip;
-document.getElementById("restart").onclick=()=>{location.reload()};
+
+document.getElementById("restart").onclick=()=>location.reload();
 document.getElementById("openForm").onclick=()=>{
   const base="https://docs.google.com/forms/d/e/1FAIpQLSfQifzm6imaI4XfThsNBugEAuRLNyEEYZB5z1pf2yOcrmgiVw/viewform?usp=pp_url";
   const entry="entry.1497568293";
   const params=finalTop.map(x=>entry+"="+encodeURIComponent(x)).join("&");
   window.location.href=base+"&"+params;
 };
+
 start();
 </script>
 </body>
