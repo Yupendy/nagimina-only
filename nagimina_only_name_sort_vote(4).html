@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ナギみなオンリー名｜好きな3つを見つけよう</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#e9dfc9;color:#3f3a32;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:28px 18px 50px}
+h1{font-size:22px;font-weight:600;margin:0 0 8px}
+.sub{font-size:14px;color:#777;line-height:1.7;margin-bottom:24px}
+.card{background:#fffdf8;border-radius:18px;padding:22px;box-shadow:0 3px 18px #0000000b}
+.progress{height:5px;background:#ddd2bc;border-radius:99px;overflow:hidden;margin-bottom:18px}
+.bar{height:100%;width:0;background:#d2aa43;transition:.25s}
+.q{font-size:14px;color:#777;margin:0 0 14px;text-align:center}
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.choice{min-height:145px;border:1px solid #ddd6ca;background:#fff;border-radius:15px;padding:18px 14px;font-size:17px;line-height:1.55;cursor:pointer;transition:.15s}
+.choice:hover{transform:translateY(-2px);border-color:#c6a35b;box-shadow:0 5px 16px #00000010}
+.choice:active{transform:translateY(0)}
+.skip{display:block;margin:16px auto 0;border:0;background:none;color:#999;font-size:13px;cursor:pointer}
+.result{display:none}
+.result h2{font-size:21px;text-align:center;margin:0 0 8px}
+.result p{text-align:center;color:#777;font-size:14px;line-height:1.7}
+.top{margin:22px 0}
+.row{display:flex;align-items:center;gap:12px;padding:13px 8px;border-bottom:1px solid #eee}
+.num{font-size:20px;width:28px;text-align:center;color:#c29a39;font-weight:600}
+.name{font-size:16px;line-height:1.45}
+.vote{margin-top:20px}
+.vote h3{font-size:16px;margin:0 0 8px}
+.vote label{display:block;padding:10px 0;font-size:15px}
+button.primary{width:100%;border:0;border-radius:12px;padding:14px;background:#333;color:white;font-size:15px;margin-top:10px}
+.note{font-size:12px;color:#999;line-height:1.6;margin-top:14px}
+.restart{display:block;margin:18px auto 0;border:0;background:none;color:#777;text-decoration:underline}
+@media(max-width:520px){.choices{grid-template-columns:1fr}.choice{min-height:105px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="sort">
+    <h1>ナギみなオンリータイトル総選挙</h1>
+    <div class="sub">候補を2つずつ比べて、「より好き」と思う方を選んでください。深く考えず、直感でどうぞ。最後にあなたのTOP3が表示されます。</div>
+    <div class="card">
+      <div class="progress"><div class="bar" id="bar"></div></div>
+      <p class="q" id="q">どちらが好き？</p>
+      <div class="choices">
+        <button class="choice" id="a">渚に揺らめく水面とあなた</button>
+        <button class="choice" id="b">凪の水面に過ぎゆく春が</button>
+      </div>
+      <button class="skip" id="skip">どちらも決めにくい</button>
+    </div>
+  </div>
+
+  <div class="card result" id="result">
+    <h2>あなたのTOP3</h2>
+    <p>比較の結果、あなたが特に好きだった候補はこちらです。</p>
+    <div class="top" id="top"></div>
+    <div class="vote">
+      <h3>この3つの中から、最終的に一番推したいものを1つ選ぶ</h3>
+      <div id="voteOptions"></div>
+      <button class="primary" id="openForm">この3つで投票する</button>
+      <div class="note">TOP3が選択された状態でGoogleフォームを開きます。内容を確認して、そのまま送信できます。</div>
+    </div>
+    <button class="restart" id="restart">もう一度やる</button>
+  </div>
+</div>
+
+<script>
+const candidates = ["渚に揺らめく水面とあなた", "凪の水面に過ぎゆく春が", "繋ぎとめよう、惜しみない愛を", "春を待つふたり", "凪いでる振りしてヘビーな恋を！", "恋の暗号は北のプリンスと蛇しか知らない", "十六夜の日になつめく恋を", "波が穏やかになること", "幸せなギフトをみな様に", "NAGIMINA IN BLOOM", "ノスメ航空臨時便", "桜凪ぐ波打ち際", "凪と波のあいだ", "北の王子様に薔薇を", "NAGIMINA, NORTHBOUND", "大人ぎりぎりの水無月", "王子様、蛇に噛まれる", "渚のギャングスター", "治外法権の波打ち際にて", "わがままなgive me now!", "凪ゆらぎ水面が揺蕩う頃に", "全部あなたのせいですよ", "凪いだ水面に浮かんだ桜", "渚に押し寄る恋と波"];
+
+// Merge-sort style pairwise ranking. The initial order is shuffled so that
+// candidates are not presented in the order supplied by the organizer.
+let arr=[], comparisons=0, totalEstimate=0, queue=[], current=null, left=[], right=[], merged=[];
+function shuffle(x){x=[...x];for(let i=x.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]]}return x}
+function start(){
+  arr=shuffle(candidates); comparisons=0; queue=[]; 
+  // bottom-up merge sort, one pair comparison at a time
+  let width=1;
+  while(width<arr.length){
+    for(let i=0;i<arr.length;i+=2*width){
+      let l=arr.slice(i,i+width), r=arr.slice(i+width,i+2*width);
+      if(r.length) queue.push({l,r});
+      else queue.push({l, r:[]});
+    }
+    arr = []; // rebuilt after each pass
+    // We cannot execute passes until answers are known, so store pass structure.
+    queue=[]; break;
+  }
+  buildPass(shuffle(candidates),1);
+}
+let passArr=[], passWidth=1, groups=[], gi=0, li=0, ri=0, mergedPass=[];
+function buildPass(a,w){
+  passArr=a; passWidth=w; groups=[];
+  for(let i=0;i<a.length;i+=2*w) groups.push({l:a.slice(i,i+w),r:a.slice(i+w,i+2*w)});
+  gi=0; li=0; ri=0; mergedPass=[]; nextComparison();
+}
+function nextComparison(){
+  while(gi<groups.length){
+    let g=groups[gi];
+    if(g.r.length===0){ mergedPass.push(...g.l); gi++; continue; }
+    if(li>=g.l.length){mergedPass.push(...g.r.slice(ri));gi++;li=ri=0;continue}
+    if(ri>=g.r.length){mergedPass.push(...g.l.slice(li));gi++;li=ri=0;continue}
+    current=[g.l[li],g.r[ri]];
+    render();
+    return;
+  }
+  if(mergedPass.length===passArr.length){
+    if(passWidth>=passArr.length){finish(mergedPass);return}
+    buildPass(mergedPass,passWidth*2);
+  }
+}
+function choose(which){
+  let g=groups[gi];
+  if(which===0){mergedPass.push(g.l[li++]);}
+  else {mergedPass.push(g.r[ri++]);}
+  comparisons++; nextComparison();
+}
+function skip(){
+  // tie: alternate the side to avoid forcing a choice
+  let g=groups[gi];
+  if(Math.random()<.5) mergedPass.push(g.l[li++]); else mergedPass.push(g.r[ri++]);
+  comparisons++; nextComparison();
+}
+function render(){
+  document.getElementById("a").textContent=current[0];
+  document.getElementById("b").textContent=current[1];
+  document.getElementById("q").textContent="どちらが好き？";
+  let est=Math.max(1,Math.ceil(candidates.length*Math.log2(candidates.length)));
+  document.getElementById("bar").style.width=Math.min(96,comparisons/est*70)+"%";
+}
+function finish(sorted){
+  document.getElementById("sort").style.display="none";
+  document.getElementById("result").style.display="block";
+  let top=sorted.slice(0,3);
+  document.getElementById("top").innerHTML=top.map((x,i)=>`<div class="row"><div class="num">${i+1}</div><div class="name">${esc(x)}</div></div>`).join("");
+  document.getElementById("voteOptions").innerHTML=top.map((x,i)=>`<label><input type="radio" name="vote" value="${escAttr(x)}"> ${esc(x)}</label>`).join("");
+  window.finalTop=top;
+}
+function esc(s){return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function escAttr(s){return s.replace(/"/g,"&quot;")}
+document.getElementById("a").onclick=()=>choose(0);
+document.getElementById("b").onclick=()=>choose(1);
+document.getElementById("skip").onclick=skip;
+document.getElementById("restart").onclick=()=>{location.reload()};
+document.getElementById("openForm").onclick=()=>{
+  const base="https://docs.google.com/forms/d/e/1FAIpQLSfQifzm6imaI4XfThsNBugEAuRLNyEEYZB5z1pf2yOcrmgiVw/viewform?usp=pp_url";
+  const entry="entry.1497568293";
+  const params=finalTop.map(x=>entry+"="+encodeURIComponent(x)).join("&");
+  window.location.href=base+"&"+params;
+};
+start();
+</script>
+</body>
+</html>
